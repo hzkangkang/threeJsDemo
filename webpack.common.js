@@ -2,13 +2,17 @@ const path = require('path');
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
-
+const CopyPlugin = require('copy-webpack-plugin');
 module.exports = {
     entry: {
         app: './src/index.js',
     },
     module: {
         rules: [
+            {
+                test: /.(png|jpg|gif|jpeg)$/,
+                use: 'file-loader'
+            },
             {
                 test: /\.css$/,
                 use: ['style-loader', 'css-loader']
@@ -34,6 +38,14 @@ module.exports = {
             title: 'caching'
         }),
         new webpack.HashedModuleIdsPlugin(),
+        new CopyPlugin({
+            patterns: [ // 复制插件
+                {from: path.join(__dirname, 'public'), to: path.join(__dirname, 'dist'), globOptions: {
+                    ignore: ['.*']
+                    }}
+            ],
+
+        }),
     ],
     output: {
         filename: '[name].[hash].js',
