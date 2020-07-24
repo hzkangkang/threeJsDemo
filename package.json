@@ -7,7 +7,7 @@
     "dat.gui": "^0.7.7",
     "fs": "^0.0.1-security",
     "inquirer": "^7.3.0",
-    "lodash": "^4.17.15",
+    "lodash": "^4.17.19",
     "stats.js": "^0.17.0",
     "three": "^0.118.3",
     "uglifyjs-webpack-plugin": "^2.2.0"
