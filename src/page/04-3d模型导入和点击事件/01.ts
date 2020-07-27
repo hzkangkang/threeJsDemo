@@ -1,17 +1,19 @@
 import {
+    AnimationMixer,
     AxesHelper,
-    PerspectiveCamera,
-    Scene,
-    WebGL1Renderer,
-    PlaneBufferGeometry,
-    PCFSoftShadowMap,
-    MeshPhongMaterial,
-    DoubleSide,
+    Clock,
     Color,
-    Fog,
     DirectionalLight,
+    Fog,
     HemisphereLight,
     Mesh,
+    MeshPhongMaterial,
+    PCFSoftShadowMap,
+    PerspectiveCamera,
+    PlaneBufferGeometry,
+    Scene,
+    SkeletonHelper,
+    WebGL1Renderer
 } from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
 import {OrbitControls} from '../../assets/js/OrbitControls';
@@ -23,7 +25,9 @@ class ThreeFn {
     private camera: PerspectiveCamera;
     private renderer: WebGL1Renderer;
     private stats: Stats;
+    private clock: Clock;
     private gLTFLoader: GLTFLoader;
+    private animationMixer: AnimationMixer;
     private domWrapId = 'canvas-frame';
     private width = window.innerWidth;
     private height = window.innerHeight;
@@ -35,17 +39,6 @@ class ThreeFn {
         this.runPlugin();
     }
 
-    /*********** 辅助函数 ***********/
-    private windowResize() {
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    private insertDom() {
-        const el = document.createElement('div');
-        const body = document.getElementsByTagName('body')[0];
-        el.id = this.domWrapId;
-        body.appendChild(el);
-    }
 
     /*********** three组件 ***********/
     private async createBox() {
@@ -54,7 +47,7 @@ class ThreeFn {
             new PlaneBufferGeometry(40, 40),
             new MeshPhongMaterial({
                 color: 0x999999,
-                depthWrite: false
+                depthWrite: true
             })
         );
         groundMesh.rotation.x = -Math.PI / 2;
@@ -76,11 +69,47 @@ class ThreeFn {
         this.scene.add(light2);
         // 载入模型
         this.gLTFLoader.load('./static/file/Soldier.glb', (gltf) => {
-            this.scene.add(gltf.scene);
+            this.soliderControl(gltf);
+        }, xhr => {
+            // 后台打印查看模型文件加载进度
+            console.log('加载完成的百分比' + (xhr.loaded / xhr.total * 100) + '%');
         });
 
         // 初始化的仅一次渲染
         this.onceRender();
+    }
+
+    /**
+     * 3d模型载入后的控制
+     * @param gltf 3d模型
+     */
+    private soliderControl(gltf) {
+        gltf.scene.name = 'Soldier';
+        this.scene.add(gltf.scene);
+        const animationClip = gltf.animations.find(animationClip => animationClip.name === 'Walk');
+        const action = this.animationMixer.clipAction(animationClip);
+        action.play();
+        // Enable Shadows
+        gltf.scene.traverse(function (object) {
+            if (object.isMesh) {
+                object.castShadow = true;
+            }
+        });
+
+        // 骨骼
+        this.scene.add(new SkeletonHelper(gltf.scene))
+    }
+
+    /*********** dom处理函数 ***********/
+    private windowResize() {
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    private insertDom() {
+        const el = document.createElement('div');
+        const body = document.getElementsByTagName('body')[0];
+        el.id = this.domWrapId;
+        body.appendChild(el);
     }
 
     /*********** 执行函数 ***********/
@@ -102,9 +131,15 @@ class ThreeFn {
         // 渲染器
         this.renderer = new WebGL1Renderer({antialias: true});
         this.renderer.setSize(this.width, this.height);
-        this.renderer.setPixelRatio( window.devicePixelRatio );
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = PCFSoftShadowMap;
+
+        // 跟踪时间
+        this.clock = new Clock();
+
+        // 动画混合器（播放器）
+        this.animationMixer = new AnimationMixer(this.scene);
 
         // 3d loader
         this.gLTFLoader = new GLTFLoader();
@@ -135,11 +170,15 @@ class ThreeFn {
     // 渲染到浏览器
     private render() {
         this.stats.begin();
-        window.requestAnimationFrame(() => {
-            this.render()
-        });
+        // 更新动画
+        this.animationMixer.update(this.clock.getDelta());
+        //
         this.renderer.render(this.scene, this.camera);
-        this.stats.end();
+        // 重复触发
+        window.requestAnimationFrame(() => {
+            this.render();
+        });
+        this.stats.update();
     }
 
     // 执行渲染
