@@ -9,10 +9,14 @@ import {
     Mesh,
     MeshPhongMaterial,
     PCFSoftShadowMap,
+    AnimationAction,
     PerspectiveCamera,
     PlaneBufferGeometry,
+    Raycaster,
     Scene,
+    Object3D,
     SkeletonHelper,
+    Vector2,
     WebGL1Renderer
 } from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
@@ -26,6 +30,7 @@ class ThreeFn {
     private renderer: WebGL1Renderer;
     private stats: Stats;
     private clock: Clock;
+    private walkAction: AnimationAction;
     private gLTFLoader: GLTFLoader;
     private animationMixer: AnimationMixer;
     private domWrapId = 'canvas-frame';
@@ -39,11 +44,10 @@ class ThreeFn {
         this.runPlugin();
     }
 
-
     /*********** three组件 ***********/
     private async createBox() {
         // 环境
-        var groundMesh = new Mesh(
+        const groundMesh = new Mesh(
             new PlaneBufferGeometry(40, 40),
             new MeshPhongMaterial({
                 color: 0x999999,
@@ -53,6 +57,7 @@ class ThreeFn {
         groundMesh.rotation.x = -Math.PI / 2;
         groundMesh.receiveShadow = true;
         this.scene.add(groundMesh);
+        groundMesh.name = 'ground';
         // 光源
         const light = new HemisphereLight(0xffffff, 0x444444);
         const light2 = new DirectionalLight(0xffffff);
@@ -69,7 +74,7 @@ class ThreeFn {
         this.scene.add(light2);
         // 载入模型
         this.gLTFLoader.load('./static/file/Soldier.glb', (gltf) => {
-            this.soliderControl(gltf);
+            this.soldierControl(gltf);
         }, xhr => {
             // 后台打印查看模型文件加载进度
             console.log('加载完成的百分比' + (xhr.loaded / xhr.total * 100) + '%');
@@ -83,12 +88,12 @@ class ThreeFn {
      * 3d模型载入后的控制
      * @param gltf 3d模型
      */
-    private soliderControl(gltf) {
+    private soldierControl(gltf) {
         gltf.scene.name = 'Soldier';
         this.scene.add(gltf.scene);
-        const animationClip = gltf.animations.find(animationClip => animationClip.name === 'Walk');
-        const action = this.animationMixer.clipAction(animationClip);
-        action.play();
+        const animationClip = gltf.animations.find(animationClip => animationClip.name === 'Run');
+        this.walkAction = this.animationMixer.clipAction(animationClip);
+        // this.walkAction.play();
         // Enable Shadows
         gltf.scene.traverse(function (object) {
             if (object.isMesh) {
@@ -97,8 +102,13 @@ class ThreeFn {
         });
 
         // 骨骼
-        this.scene.add(new SkeletonHelper(gltf.scene))
+        // this.scene.add(new SkeletonHelper(gltf.scene));
+
+        // 事件处理
+        this.soldierClick();
+        this.soldierKeyCodeEvent();
     }
+
 
     /*********** dom处理函数 ***********/
     private windowResize() {
@@ -110,6 +120,63 @@ class ThreeFn {
         const body = document.getElementsByTagName('body')[0];
         el.id = this.domWrapId;
         body.appendChild(el);
+    }
+
+    /**
+     * 模型点击事件
+     */
+    private soldierClick() {
+        this.renderer.domElement.addEventListener('click', (e) => {
+            // 取得鼠标位置
+            const {offsetX, offsetY} = e;
+            // 取得对应鼠标位置的threeJs标准坐标
+            const x = (offsetX / window.innerWidth) * 2 - 1;
+            const y = -(offsetY / window.innerHeight) * 2 + 1;
+            const point = new Vector2(x, y);
+            // 光线投射用于进行鼠标拾取（在三维空间中计算出鼠标移过了什么物体）
+            const raycaster = new Raycaster();
+            // 设置鼠标位置和参考相机
+            raycaster.setFromCamera(point, this.camera);
+            // 计算物体和射线的焦点, 鼠标点击对应的物体（所有鼠标映射到的物体，包括被遮挡的）
+            const intersects: any = raycaster.intersectObjects(this.scene.children, true);
+            // 过滤环境
+            const intersect = intersects.filter(v => v.object.name !== 'ground')[0];
+            //
+            if (intersect && this.isClickSoldier(intersect.object)) {
+                this.walkAction.paused = !this.walkAction.paused;
+            }
+        });
+    }
+
+    soldierKeyCodeEvent() {
+        this.renderer.domElement.addEventListener('keydown',e => {
+            const { keyCode } = e;
+            if (keyCode === 87) {
+                if (this.walkAction.time === 0) this.walkAction.play();
+                this.walkAction.paused = false;
+            }
+        });
+        this.renderer.domElement.addEventListener('keyup',e => {
+            const { keyCode } = e;
+            if (keyCode === 87) {
+                this.walkAction.paused = true;
+            }
+        });
+
+    }
+
+    /**
+     * 递归导出是否点击的对象是Soldier
+     * @param object
+     */
+    private isClickSoldier(object: Object3D):Object3D {
+        if (object.name === 'Soldier') {
+            return object;
+        } else if (object.parent) {
+            return this.isClickSoldier(object.parent);
+        } else {
+            return null;
+        }
     }
 
     /*********** 执行函数 ***********/
@@ -146,7 +213,7 @@ class ThreeFn {
 
         // 坐标
         const axesHelper = new AxesHelper(100);
-        // this.scene.add(axesHelper);
+        this.scene.add(axesHelper);
 
         // 生成其它相关threeJs组件
         this.createBox();
